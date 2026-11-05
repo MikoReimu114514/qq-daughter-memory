@@ -17,7 +17,7 @@ const CONFIG = {
   broad: { minDegree: 5, ratio: 0.15, minFreq: 0.2, weightThreshold: 70 }, // 70 补偿 recency ×1.3
   userEntities: ['管理员', '博麗', '博麗ユキ'],
   cold: { maxAgeDays: 60, minWeight: 20 },
-  condense: { baseCap: 8, maxCap: 20, chunkSize: 20, minQuietMs: 30 * 60000, maxDelayMs: 2 * 3600000 },
+  condense: { minCap: 3, maxCap: 40, chunkSize: 20, minQuietMs: 30 * 60000, maxDelayMs: 2 * 3600000 },
   recency: { freshDays: 7, staleDays: 30, freshBoost: 1.3, stalePenalty: 0.8 },
   protect: { enabled: true, peakDegree: 15, peakWeight: 80, days: 180, maxItems: 30, perTopic: 4 },
   prune: { softCapDelete: 0.2, hardCapDelete: 0.5, hardCapRatio: 0.9, lowWeight: 40, compressBelow: 65 },
