@@ -11,9 +11,9 @@ const V2_FILE = path.join(STORE_DIR, 'memory-v2.json');
 
 // ---- 可配置参数 ----
 const CONFIG = {
-  caps: { entity: 50, event: 80, concept: 60 },
+  caps: { entity: 75, event: 120, concept: 90 },
   coreCap: 20,
-  coldCap: 300,
+  coldCap: 450,
   broad: { minDegree: 5, ratio: 0.15, minFreq: 0.2, weightThreshold: 70 }, // 70 补偿 recency ×1.3
   userEntities: ['管理员', '博麗', '博麗ユキ'],
   cold: { maxAgeDays: 60, minWeight: 20 },
@@ -414,7 +414,9 @@ function prune(key) {
   let overflow = 0;
   for (const k of ['entity', 'event', 'concept']) {
     if (next[k].length > CONFIG.caps[k]) {
-      const sorted = next[k].slice().sort((a, b) => (isProtected(b) ? 1 : 0) - (isProtected(a) ? 1 : 0) || weightOf(b) - weightOf(a));
+      // 截断排序：保胎(2分) > 重要(importance>=8, 1分) > 权重——防「该进 core 的新条目」被旧热门挤出
+      const prioOf = (m) => (isProtected(m) ? 2 : 0) + ((m.importance || 0) >= 8 ? 1 : 0);
+      const sorted = next[k].slice().sort((a, b) => prioOf(b) - prioOf(a) || weightOf(b) - weightOf(a));
       const keep = sorted.slice(0, CONFIG.caps[k]);
       const drop = sorted.slice(CONFIG.caps[k]);
       for (const m of drop) { s.cold.push({ ...m, weight: weightOf(m), deletedAt: now(), reason: 'overflow' }); overflow++; }
