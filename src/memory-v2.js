@@ -1,4 +1,4 @@
-﻿// lib/memory-v2.js — 分桶 + 权重打分 + 关联 + core + 软淘汰 的长期记忆引擎（v2.1）
+// lib/memory-v2.js — 分桶 + 权重打分 + 关联 + core + 软淘汰 的长期记忆引擎（v2.1）
 // v2.1 新增：①矛盾失效（supersededBy/validUntil）②最近活跃度（lastHitAt/recencyFactor）
 //            ③保胎层（曾主节点的关键记忆保护 + 竞争上岗）④双通道复活（实体+文本）+别名表
 //            ⑤冷存储溢出压缩 + 自适应删除上限
@@ -23,8 +23,8 @@ const CONFIG = {
   prune: { softCapDelete: 0.2, hardCapDelete: 0.5, hardCapRatio: 0.9, lowWeight: 40, compressBelow: 65 },
   coldCompress: { enabled: true, pageSize: 30 },
   revive: { textOverlap: true, aliasTable: true, maxPerRound: 12 },
-  dedupe: { enabled: true, similarity: 0.6 }, // 近重复合并阈值（字面；语义重复交给 LLM）
-  markers: { enabled: true, boost: 1, words: ['必须', '永远', '绝不要', '绝不', '禁止', '安全', '总是', '一定', '千万不要', '务必', '切记', 'never', 'always', 'must', 'mandatory', 'critical'] }, // 内容标记加成：命中关键词 → importance +boost（补 LLM 漏判）
+  dedupe: { enabled: true, similarity: 0.8 }, // 近重复合并阈值（0.6→0.8：0.6 会把「同模板不同地点」「带数量 vs 不带数量」误并，见 2026-11-21 Seattle/Portland 0.641、neon tetras 0.708）
+  markers: { enabled: true, boost: 1, words: ['必须', '永远', '绝不要', '绝不', '禁止', '安全', '总是', '一定', '千万不要', '务必', '切记', '通常', '一般', '平时', '老是', '每次', '从不', '不再', 'never', 'always', 'must', 'mandatory', 'critical', 'usually', 'every time', 'no longer'] }, // 内容标记加成：命中关键词 → importance +boost（补 LLM 漏判）；含中英频率副词（2026-11-22 加，见 59524333）
   floor: { enabled: true, minImportance: 8, floorRatio: 0.7 }, // 衰减下限：重要记忆(imp≥8)衰减不跌破 70%（防误删）
   contradict: { enabled: true, minOverlap: 0.5, pairs: [['喜欢','讨厌'],['是','不是'],['有','没有'],['开','关'],['要','不要'],['能','不能'],['会','不会'],['同意','反对'],['增加','减少'],['涨','跌'],['开始','结束'],['开','关'],['好','坏'],['爱','恨'],['去','留']] }, // 规则矛盾检测（反义词对，补 LLM 漏）
   embed: { enabled: false, url: 'http://127.0.0.1:11434', model: 'bge-m3', weight: 40 }, // 语义检索开关（实测短事实记忆下向量拖后腿，默认关；开启改 true）
@@ -97,7 +97,7 @@ function add(key, entries, opts = {}) {
   const s = ensure(key);
   let added = 0;
   for (const e of entries) {
-    const text = String(e.text || '').trim().slice(0, 200);
+    const text = String(e.text || '').trim().slice(0, 400); // 200→400：列表类/约定类事实会被切掉后半（2026-11-22）
     if (!text) continue;
     const bucket = ['entity', 'event', 'concept', 'taboo'].includes(e.bucket) ? e.bucket : 'event';
     const all = [...s.core, ...(s.taboo || []), ...s.entity, ...s.event, ...s.concept];
@@ -137,6 +137,8 @@ function add(key, entries, opts = {}) {
       createdAt: opts.createdAt || now(),
       ...(e.event_date ? { eventDate: Date.parse(String(e.event_date).replace(/\//g, '-')) || undefined } : {}),
       source: opts.source || 'auto',
+      // turn：这条记忆对应原文第几轮（跨会话单调递增）。同一天多条靠它定先后（2026-11-22）
+      turn: typeof e.turn === 'number' ? e.turn : (opts.turn != null ? opts.turn : null),
       inCore: false,
       protectedUntil: null,
       validUntil: null,
